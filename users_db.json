@@ -2,80 +2,169 @@
   "Alice": {
     "password": "alice123",
     "blacklist": [],
-    "wants_to_meet": ["Bob"],
+    "wants_to_meet": [
+      "Bob"
+    ],
     "open_to_new": true,
     "availability": [
-      {"day": "Monday", "start": "07:15", "end": "09:45"},
-      {"day": "Wednesday", "start": "13:00", "end": "15:30"}
+      {
+        "day": "Monday",
+        "start": "07:15",
+        "end": "09:45"
+      },
+      {
+        "day": "Wednesday",
+        "start": "13:00",
+        "end": "15:30"
+      }
     ]
   },
   "Bob": {
     "password": "bob123",
     "blacklist": [],
-    "wants_to_meet": ["Alice", "Charlie"],
+    "wants_to_meet": [
+      "Alice",
+      "Charlie"
+    ],
     "open_to_new": true,
     "availability": [
-      {"day": "Monday", "start": "08:30", "end": "10:15"},
-      {"day": "Wednesday", "start": "14:00", "end": "16:00"}
+      {
+        "day": "Monday",
+        "start": "08:30",
+        "end": "10:15"
+      },
+      {
+        "day": "Wednesday",
+        "start": "14:00",
+        "end": "16:00"
+      }
     ]
   },
   "Charlie": {
     "password": "charlie123",
     "blacklist": [],
-    "wants_to_meet": ["Alice"],
+    "wants_to_meet": [
+      "Alice"
+    ],
     "open_to_new": false,
     "availability": [
-      {"day": "Monday", "start": "09:00", "end": "11:00"},
-      {"day": "Wednesday", "start": "13:45", "end": "15:15"}
+      {
+        "day": "Monday",
+        "start": "09:00",
+        "end": "11:00"
+      },
+      {
+        "day": "Wednesday",
+        "start": "13:45",
+        "end": "15:15"
+      }
     ]
   },
   "David": {
     "password": "david123",
     "blacklist": [],
-    "wants_to_meet": ["Eve"],
+    "wants_to_meet": [
+      "Eve"
+    ],
     "open_to_new": false,
     "availability": [
-      {"day": "Tuesday", "start": "13:00", "end": "15:00"},
-      {"day": "Thursday", "start": "10:00", "end": "12:00"}
+      {
+        "day": "Tuesday",
+        "start": "13:00",
+        "end": "15:00"
+      },
+      {
+        "day": "Thursday",
+        "start": "10:00",
+        "end": "12:00"
+      }
     ]
   },
   "Eve": {
     "password": "eve123",
     "blacklist": [],
-    "wants_to_meet": ["David"],
+    "wants_to_meet": [
+      "David"
+    ],
     "open_to_new": false,
     "availability": [
-      {"day": "Tuesday", "start": "14:15", "end": "16:45"},
-      {"day": "Thursday", "start": "09:45", "end": "11:15"}
+      {
+        "day": "Tuesday",
+        "start": "14:15",
+        "end": "16:45"
+      },
+      {
+        "day": "Thursday",
+        "start": "09:45",
+        "end": "11:15"
+      }
     ]
   },
   "Fiona": {
     "password": "fiona123",
-    "blacklist": ["Bob"],
-    "wants_to_meet": ["Alice", "David"],
+    "blacklist": [
+      "Bob"
+    ],
+    "wants_to_meet": [
+      "Alice",
+      "David"
+    ],
     "open_to_new": false,
     "availability": [
-      {"day": "Monday", "start": "08:00", "end": "10:00"},
-      {"day": "Wednesday", "start": "14:00", "end": "15:30"}
+      {
+        "day": "Monday",
+        "start": "08:00",
+        "end": "10:00"
+      },
+      {
+        "day": "Wednesday",
+        "start": "14:00",
+        "end": "15:30"
+      }
     ]
   },
   "Grace": {
     "password": "grace123",
-    "blacklist": ["Charlie"],
-    "wants_to_meet": ["Alice"],
+    "blacklist": [
+      "Charlie"
+    ],
+    "wants_to_meet": [
+      "Alice"
+    ],
     "open_to_new": true,
     "availability": [
-      {"day": "Monday", "start": "07:30", "end": "09:30"},
-      {"day": "Wednesday", "start": "13:15", "end": "14:45"}
+      {
+        "day": "Monday",
+        "start": "07:30",
+        "end": "09:30"
+      },
+      {
+        "day": "Wednesday",
+        "start": "13:15",
+        "end": "14:45"
+      }
     ]
   },
   "Henry": {
     "password": "henry123",
     "blacklist": [],
-    "wants_to_meet": ["Alice"],
+    "wants_to_meet": [
+      "Alice"
+    ],
     "open_to_new": false,
     "availability": [
-      {"day": "Friday", "start": "10:00", "end": "12:00"}
+      {
+        "day": "Friday",
+        "start": "10:00",
+        "end": "12:00"
+      }
     ]
+  },
+  "Jeff": {
+    "password": "123",
+    "blacklist": [],
+    "wants_to_meet": [],
+    "open_to_new": false,
+    "availability": []
   }
 }

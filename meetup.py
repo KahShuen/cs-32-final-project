@@ -109,6 +109,7 @@ def ask_wants_to_meet(db, name):
 def ask_availability(db, name):
     print("\nEnter your availability, one slot per line.")
     print("Format: Day HH:MM HH:MM   (e.g. 'Monday 10:00 12:00')")
+    print("Each time slot should be at least 30 minutes long.")
     print("Type 'done' when finished.")
 
     availability = []
@@ -130,6 +131,9 @@ def ask_availability(db, name):
             continue
         if s >= e:
             print("Start time must be before end time.")
+            continue
+        if e - s < 30:
+            print("Each availability slot must be at least 30 minutes long.")
             continue
         availability.append({"day": day, "start": start, "end": end})
 
@@ -224,10 +228,9 @@ def find_groups(db, graph):
 
 # ---------- availability blocks ----------
 
-# We use 15-minute blocks instead of 30-minute blocks. This way, if Alice is
-# free 1:00-2:30 and Bob is free 1:15-3:00, we still catch the 1:15-2:30
-# overlap that 30-minute blocks aligned to :00/:30 would miss.
-BLOCK = 15
+# Use 1-minute blocks so overlaps are as precise as possible.
+# Example: 07:15-08:30 and 07:20-08:00 intersect exactly at 07:20-08:00.
+BLOCK = 1
 
 
 def time_to_minutes(t):
