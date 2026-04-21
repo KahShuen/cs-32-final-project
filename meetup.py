@@ -1,4 +1,4 @@
-import json                         # lets us read and write JSON files for saving user data
+import json                        
 import os                           # lets us check if a file exists on the computer
 import sys                          # lets us read command line arguments like --show
 from collections import deque       # gives us an efficient queue for BFS
