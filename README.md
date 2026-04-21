@@ -42,5 +42,5 @@ Files:
 - users_db.json: stores user data
 
 Credits:
-- We used Codex and Claude to help us with this code. Most of it was written by the team. We used the AI to help with architecting the timeslots, and generating test inputs and testing edge cases. 
+- We used Codex and Claude to help us with this code. We used the AI to help with architecting the timeslots, and generating test inputs and testing edge cases. 
 
