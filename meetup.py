@@ -5,13 +5,12 @@ from collections import deque
 from itertools import combinations
 
 
-# ---------- persistent storage ----------
 
 USERS_DB = "users_db.json"
 
 
 def load_db():
-    # read the saved users file (returns empty dict if it doesn't exist yet)
+    # read the saved users file and returns empty dictionary if it doesn't exist yet
     if os.path.exists(USERS_DB):
         with open(USERS_DB, "r") as f:
             return json.load(f)
@@ -23,10 +22,9 @@ def save_db(db):
         json.dump(db, f, indent=2)
 
 
-# ---------- small input helpers ----------
 
 def ask_yes_no(prompt):
-    # only accepts "yes" or "no", case-insensitive
+    # this will only accept yes or no and is case-insensitive
     while True:
         ans = input(prompt).strip().lower()
         if ans == "yes":
@@ -44,14 +42,13 @@ def ask_nonempty(prompt):
         print("This can't be blank.")
 
 
-# ---------- login / register ----------
-
+# existing users login while new users will register a new account
 def login_or_register(db):
     print("===== MEETUP LOGIN =====")
     name = ask_nonempty("Enter your name: ")
 
     if name in db:
-        # existing user: ask for password (3 tries)
+        # users who have registered before will be asked to key their password with max 3 tries
         for _ in range(3):
             pw = ask_nonempty("Enter your password: ")
             if pw == db[name]["password"]:
@@ -61,7 +58,7 @@ def login_or_register(db):
         print("Too many failed attempts. Exiting.")
         sys.exit(1)
     else:
-        # brand new user: register
+        # new users will be asked to create an account and key in their blacklist + open to new ppl preference
         print(f"No account found for '{name}'. Creating a new one.")
         pw = ask_nonempty("Choose a password: ")
         db[name] = {
@@ -76,8 +73,8 @@ def login_or_register(db):
         return name
 
 
-# ---------- per-session prompts ----------
 
+# shows users the current blacklist they have and ask if they want to change the list
 def ask_blacklist(db, name):
     # show what we already remember from previous sessions
     current = db[name].get("blacklist", [])
@@ -91,7 +88,7 @@ def ask_blacklist(db, name):
 
     if ans:
         new_names = [n.strip() for n in ans.split(",") if n.strip()]
-        # merge with existing blacklist (no duplicates)
+        # merge with existing blacklist and ensure no duplicates
         merged = sorted(set(current) | set(new_names))
         db[name]["blacklist"] = merged
         print(f"Updated blacklist: {', '.join(merged)}")
@@ -146,11 +143,9 @@ def ask_open(db, name):
     )
 
 
-# ---------- graph (DIRECTED) ----------
-
+# building the directed graph, meaning if A wants to meet B, A -> B, it shld return something like {"Alice": {"Bob"}, "Bob": {"Charlie"}, ...}
 def build_graph(db):
-    # directed graph: A -> B means "A wants to meet B"
-    # returns something like {"Alice": {"Bob"}, "Bob": {"Charlie"}, ...}
+    
     graph = {name: set() for name in db}
     for name, data in db.items():
         for target in data.get("wants_to_meet", []):
@@ -158,7 +153,7 @@ def build_graph(db):
                 graph[name].add(target)
     return graph
 
-
+# checking the open to new ppl and blacklist conditions before creating the possible grpings
 def can_meet(db, graph, a, b):
     """Decide if A and B are allowed to be in the same group.
 
@@ -211,7 +206,7 @@ def find_groups(db, graph):
             visited.add(node)
             component.add(node)
 
-            # candidates = people node points to OR people who point to node
+            # candidates = people node points to or people who point to node
             candidates = set(graph[node])
             for other in graph:
                 if node in graph[other]:
