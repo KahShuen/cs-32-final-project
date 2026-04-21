@@ -42,8 +42,8 @@ def ask_nonempty(prompt):
         print("This can't be blank.")
 
 
-# existing users login while new users will register a new account
 def login_or_register(db):
+    # existing users login while new users will register a new account
     print("===== MEETUP LOGIN =====")
     name = ask_nonempty("Enter your name: ")
 
@@ -74,8 +74,8 @@ def login_or_register(db):
 
 
 
-# shows users the current blacklist they have and ask if they want to change the list
 def ask_blacklist(db, name):
+    # shows users the current blacklist they have and ask if they want to change the list
     # show what we already remember from previous sessions
     current = db[name].get("blacklist", [])
     if current:
@@ -95,21 +95,36 @@ def ask_blacklist(db, name):
 
 
 def ask_wants_to_meet(db, name):
+    # allow users to input who they want to meet
     ans = input("Who do you want to meet? (comma-separated names): ").strip()
+    ans = ans.strip()  # remove extra spaces at the start/end
+
+    names = []
+
+    # only process if the user actually typed something
     if ans:
-        names = [n.strip() for n in ans.split(",") if n.strip()]
-    else:
-        names = []
+        # split the input into pieces using commas
+        raw_names = ans.split(",")
+
+        # clean each name and add it to the list if it's not empty
+        for n in raw_names:
+            clean_name = n.strip()
+            if clean_name:
+                names.append(clean_name)
+
+    # save the result in the database
     db[name]["wants_to_meet"] = names
 
 
 def ask_availability(db, name):
+    # allow users to input when they are free and the format they should write this 
     print("\nEnter your availability, one slot per line.")
     print("Format: Day HH:MM HH:MM   (e.g. 'Monday 10:00 12:00')")
     print("Each time slot should be at least 30 minutes long.")
     print("Type 'done' when finished.")
 
     availability = []
+    
     while True:
         line = input("> ").strip()
         if line.lower() == "done":
