@@ -4,415 +4,399 @@ import sys
 from collections import deque
 from itertools import combinations
 
-
-
 USERS_DB = "users_db.json"
+MIN_SLOT_MINUTES = 30
+BLOCK_SIZE = 1  # minute-level precision
 
 
 def load_db():
-    # read the saved users file and returns empty dictionary if it doesn't exist yet
     if os.path.exists(USERS_DB):
-        with open(USERS_DB, "r") as f:
-            return json.load(f)
+        with open(USERS_DB, "r") as file:
+            return json.load(file)
     return {}
 
 
 def save_db(db):
-    with open(USERS_DB, "w") as f:
-        json.dump(db, f, indent=2)
-
-
-
-def ask_yes_no(prompt):
-    # this will only accept yes or no and is case-insensitive
-    while True:
-        ans = input(prompt).strip().lower()
-        if ans == "yes":
-            return True
-        if ans == "no":
-            return False
-        print('Please answer "Yes" or "No".')
+    with open(USERS_DB, "w") as file:
+        json.dump(db, file, indent=2)
 
 
 def ask_nonempty(prompt):
     while True:
-        ans = input(prompt).strip()
-        if ans:
-            return ans
+        value = input(prompt).strip()
+        if value:
+            return value
         print("This can't be blank.")
 
 
-def login_or_register(db):
-    # existing users login while new users will register a new account
-    print("===== MEETUP LOGIN =====")
-    name = ask_nonempty("Enter your name: ")
+def ask_yes_no(prompt):
+    while True:
+        value = input(prompt).strip().lower()
+        if value == "yes":
+            return True
+        if value == "no":
+            return False
+        print('Please answer "Yes" or "No".')
 
-    if name in db:
-        # users who have registered before will be asked to key their password with max 3 tries
+
+def login_or_register(db):
+    print("===== MEETUP LOGIN =====")
+    username = ask_nonempty("Enter your name: ")
+
+    if username in db:
         for _ in range(3):
-            pw = ask_nonempty("Enter your password: ")
-            if pw == db[name]["password"]:
-                print(f"Welcome back, {name}!")
-                return name
+            password = ask_nonempty("Enter your password: ")
+            if password == db[username]["password"]:
+                print(f"Welcome back, {username}!")
+                return username
             print("Incorrect password.")
+
         print("Too many failed attempts. Exiting.")
         sys.exit(1)
-    else:
-        # new users will be asked to create an account and key in their blacklist + open to new ppl preference
-        print(f"No account found for '{name}'. Creating a new one.")
-        pw = ask_nonempty("Choose a password: ")
-        db[name] = {
-            "password": pw,
-            "blacklist": [],
-            "wants_to_meet": [],
-            "open_to_new": False,
-            "availability": [],
-        }
-        save_db(db)
-        print(f"Account created for {name}.")
-        return name
+
+    print(f"No account found for '{username}'. Creating a new one.")
+    password = ask_nonempty("Choose a password: ")
+    db[username] = {
+        "password": password,
+        "blacklist": [],
+        "wants_to_meet": [],
+        "open_to_new": False,
+        "availability": [],
+    }
+    save_db(db)
+    print(f"Account created for {username}.")
+    return username
 
 
+def ask_blacklist(db, username):
+    saved_blacklist = db[username].get("blacklist", [])
+    if saved_blacklist:
+        print(f"Your saved blacklist: {', '.join(saved_blacklist)}")
 
-def ask_blacklist(db, name):
-    # shows users the current blacklist they have and ask if they want to change the list
-    # show what we already remember from previous sessions
-    current = db[name].get("blacklist", [])
-    if current:
-        print(f"Your saved blacklist: {', '.join(current)}")
-
-    ans = input(
+    response = input(
         "Is there anyone you want to blacklist? "
         "(comma-separated names, or press Enter to keep your current list): "
     ).strip()
 
-    if ans:
-        new_names = [n.strip() for n in ans.split(",") if n.strip()]
-        # merge with existing blacklist and ensure no duplicates
-        merged = sorted(set(current) | set(new_names))
-        db[name]["blacklist"] = merged
-        print(f"Updated blacklist: {', '.join(merged)}")
+    if not response:
+        return
+
+    names_to_add = []
+    for raw_name in response.split(","):
+        clean_name = raw_name.strip()
+        if clean_name:
+            names_to_add.append(clean_name)
+
+    updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add))
+    db[username]["blacklist"] = updated_blacklist
+    print(f"Updated blacklist: {', '.join(updated_blacklist)}")
 
 
-def ask_wants_to_meet(db, name):
-    # allow users to input who they want to meet
-    ans = input("Who do you want to meet? (comma-separated names): ").strip()
-    ans = ans.strip()  # remove extra spaces at the start/end
-
+def ask_wants_to_meet(db, username):
+    response = input("Who do you want to meet? (comma-separated names): ").strip()
     names = []
 
-    # only process if the user actually typed something
-    if ans:
-        # split the input into pieces using commas
-        raw_names = ans.split(",")
-
-        # clean each name and add it to the list if it's not empty
-        for n in raw_names:
-            clean_name = n.strip()
+    if response:
+        for raw_name in response.split(","):
+            clean_name = raw_name.strip()
             if clean_name:
                 names.append(clean_name)
 
-    # save the result in the database
-    db[name]["wants_to_meet"] = names
+    db[username]["wants_to_meet"] = names
 
 
-def ask_availability(db, name):
-    # allow users to input when they are free and the format they should write this 
+def time_to_minutes(time_text):
+    hours, minutes = time_text.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def minutes_to_time(total_minutes):
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def ask_availability(db, username):
     print("\nEnter your availability, one slot per line.")
     print("Format: Day HH:MM HH:MM   (e.g. 'Monday 10:00 12:00')")
     print("Each time slot should be at least 30 minutes long.")
     print("Type 'done' when finished.")
 
     availability = []
-    
+
     while True:
         line = input("> ").strip()
         if line.lower() == "done":
             break
+
         parts = line.split()
         if len(parts) != 3:
             print("Invalid format. Example: Monday 10:00 12:00")
             continue
-        day, start, end = parts
-        # quick sanity check that the times parse
+
+        day, start_text, end_text = parts
+
         try:
-            s = time_to_minutes(start)
-            e = time_to_minutes(end)
+            start_minutes = time_to_minutes(start_text)
+            end_minutes = time_to_minutes(end_text)
         except ValueError:
             print("Invalid time. Use HH:MM (24-hour).")
             continue
-        if s >= e:
+
+        if start_minutes >= end_minutes:
             print("Start time must be before end time.")
             continue
-        if e - s < 30:
+
+        if end_minutes - start_minutes < MIN_SLOT_MINUTES:
             print("Each availability slot must be at least 30 minutes long.")
             continue
-        availability.append({"day": day, "start": start, "end": end})
 
-    db[name]["availability"] = availability
+        availability.append({
+            "day": day,
+            "start": start_text,
+            "end": end_text,
+        })
+
+    db[username]["availability"] = availability
 
 
-def ask_open(db, name):
-    db[name]["open_to_new"] = ask_yes_no(
+def ask_open_to_new(db, username):
+    db[username]["open_to_new"] = ask_yes_no(
         "Are you open to meeting people not on your list (Yes/No)? "
     )
 
 
-# building the directed graph, meaning if A wants to meet B, A -> B, it shld return something like {"Alice": {"Bob"}, "Bob": {"Charlie"}, ...}
 def build_graph(db):
-    
-    graph = {name: set() for name in db}
-    for name, data in db.items():
-        for target in data.get("wants_to_meet", []):
-            if target in db:  # only add edges to people who actually have an account
-                graph[name].add(target)
+    graph = {}
+    for person in db:
+        graph[person] = set()
+
+    for person in db:
+        wanted_people = db[person].get("wants_to_meet", [])
+        for wanted_person in wanted_people:
+            if wanted_person in db:
+                graph[person].add(wanted_person)
+
     return graph
 
-# checking the open to new ppl and blacklist conditions before creating the possible grpings
-def can_meet(db, graph, a, b):
-    """Decide if A and B are allowed to be in the same group.
 
-    Rules (consistent with the directed graph):
-      - If either has the other in their blacklist -> NO.
-      - If both want to meet each other (A->B AND B->A) -> YES.
-      - If only A->B exists, B must be open_to_new.
-      - If only B->A exists, A must be open_to_new.
-    """
-    if a == b:
-        return False
-    if b in db[a].get("blacklist", []):
-        return False
-    if a in db[b].get("blacklist", []):
+def can_meet(db, graph, person_a, person_b):
+    if person_a == person_b:
         return False
 
-    a_wants_b = b in graph[a]
-    b_wants_a = a in graph[b]
+    if person_b in db[person_a].get("blacklist", []):
+        return False
+    if person_a in db[person_b].get("blacklist", []):
+        return False
+
+    a_wants_b = person_b in graph[person_a]
+    b_wants_a = person_a in graph[person_b]
 
     if a_wants_b and b_wants_a:
         return True
-    if a_wants_b and db[b].get("open_to_new", False):
+    if a_wants_b and db[person_b].get("open_to_new", False):
         return True
-    if b_wants_a and db[a].get("open_to_new", False):
+    if b_wants_a and db[person_a].get("open_to_new", False):
         return True
+
     return False
 
 
-def find_groups(db, graph):
-    """BFS to find connected components in the COMPATIBILITY relation.
+def get_friends_for_bfs(graph, person):
+    friends = set()
 
-    The graph is directed (from build_graph), but two people end up in the
-    same component only if can_meet(...) is true between them, which already
-    accounts for direction + open_to_new + blacklist.
-    """
+    for wanted_person in graph[person]:
+        friends.add(wanted_person)
+
+    for other_person in graph:
+        if person in graph[other_person]:
+            friends.add(other_person)
+
+    return friends
+
+
+def find_groups(db, graph):
     visited = set()
     groups = []
 
-    for start in graph:
-        if start in visited:
+    for start_person in graph:
+        if start_person in visited:
             continue
 
-        component = set()
-        queue = deque([start])
+        group = set()
+        queue = deque([start_person])
 
         while queue:
-            node = queue.popleft()
-            if node in visited:
+            person = queue.popleft()
+            if person in visited:
                 continue
-            visited.add(node)
-            component.add(node)
 
-            # candidates = people node points to or people who point to node
-            candidates = set(graph[node])
-            for other in graph:
-                if node in graph[other]:
-                    candidates.add(other)
+            visited.add(person)
+            group.add(person)
 
-            for neighbor in candidates:
-                if neighbor not in visited and can_meet(db, graph, node, neighbor):
-                    queue.append(neighbor)
+            friends = get_friends_for_bfs(graph, person)
+            for friend in friends:
+                if friend in visited:
+                    continue
+                if can_meet(db, graph, person, friend):
+                    queue.append(friend)
 
-        groups.append(component)
+        groups.append(group)
 
     return groups
 
 
-# ---------- availability blocks ----------
-
-# Use 1-minute blocks so overlaps are as precise as possible.
-# Example: 07:15-08:30 and 07:20-08:00 intersect exactly at 07:20-08:00.
-BLOCK = 1
-
-
-def time_to_minutes(t):
-    h, m = t.split(":")
-    return int(h) * 60 + int(m)
-
-
-def minutes_to_time(m):
-    return f"{m // 60:02d}:{m % 60:02d}"
-
-
 def availability_to_blocks(availability):
-    """Turn a person's availability into a set of (day, start_minute) blocks.
-
-    A block is only included if it lies fully inside one of the free windows,
-    so partial blocks at the edges are dropped (which is what we want).
-    """
     blocks = set()
+
     for slot in availability:
         day = slot["day"]
-        start = time_to_minutes(slot["start"])
-        end = time_to_minutes(slot["end"])
-        # round start UP to the next block boundary, end DOWN to the previous
-        first = ((start + BLOCK - 1) // BLOCK) * BLOCK
-        last = (end // BLOCK) * BLOCK
-        for m in range(first, last, BLOCK):
-            blocks.add((day, m))
+        start_minutes = time_to_minutes(slot["start"])
+        end_minutes = time_to_minutes(slot["end"])
+
+        first_block = ((start_minutes + BLOCK_SIZE - 1) // BLOCK_SIZE) * BLOCK_SIZE
+        last_block = (end_minutes // BLOCK_SIZE) * BLOCK_SIZE
+
+        for minute in range(first_block, last_block, BLOCK_SIZE):
+            blocks.add((day, minute))
+
     return blocks
 
 
-def common_blocks(db, group):
-    members = list(group)
-    if not members:
+def find_common_blocks(db, group):
+    group_members = list(group)
+    if not group_members:
         return set()
-    common = availability_to_blocks(db[members[0]]["availability"])
-    for member in members[1:]:
-        common &= availability_to_blocks(db[member]["availability"])
-    return common
+
+    shared_blocks = availability_to_blocks(db[group_members[0]]["availability"])
+
+    for person in group_members[1:]:
+        person_blocks = availability_to_blocks(db[person]["availability"])
+        shared_blocks &= person_blocks
+
+    return shared_blocks
 
 
 def merge_blocks_into_ranges(blocks):
-    """Group adjacent blocks back into readable (day, start, end) windows."""
-    by_day = {}
+    blocks_by_day = {}
     for day, minute in blocks:
-        by_day.setdefault(day, []).append(minute)
+        blocks_by_day.setdefault(day, []).append(minute)
 
-    ranges = []
-    for day, minutes in by_day.items():
+    time_ranges = []
+
+    for day, minutes in blocks_by_day.items():
         minutes.sort()
-        run_start = minutes[0]
-        prev = minutes[0]
-        for m in minutes[1:]:
-            if m == prev + BLOCK:
-                prev = m
+        range_start = minutes[0]
+        previous_minute = minutes[0]
+
+        for minute in minutes[1:]:
+            if minute == previous_minute + BLOCK_SIZE:
+                previous_minute = minute
             else:
-                ranges.append((day, run_start, prev + BLOCK))
-                run_start = m
-                prev = m
-        ranges.append((day, run_start, prev + BLOCK))
-    return ranges
+                time_ranges.append((day, range_start, previous_minute + BLOCK_SIZE))
+                range_start = minute
+                previous_minute = minute
+
+        time_ranges.append((day, range_start, previous_minute + BLOCK_SIZE))
+
+    return time_ranges
 
 
-# ---------- finding the BIGGEST meetable subgroups ----------
-
-def all_pairs_compatible(db, graph, combo):
-    # A BFS component can contain pairs that aren't directly compatible
-    # (e.g. two people who both connect to Alice but not to each other, or
-    # a blacklisted pair). Before proposing a meeting we must check every
-    # pair individually.
-    for i in range(len(combo)):
-        for j in range(i + 1, len(combo)):
-            if not can_meet(db, graph, combo[i], combo[j]):
+def all_pairs_compatible(db, graph, people):
+    for i in range(len(people)):
+        for j in range(i + 1, len(people)):
+            if not can_meet(db, graph, people[i], people[j]):
                 return False
     return True
 
 
-def find_largest_meetable_subgroups(db, graph, component):
-    """Inside one connected component, find every subset of the largest
-    possible size such that:
-      - every pair in the subset is compatible (blacklist / openness respected)
-      - AND the subset shares at least one common time block.
-
-    Returns a list of (set_of_names, set_of_common_blocks).
-    A meeting needs at least 2 people.
-    """
-    members = sorted(component)
-    n = len(members)
-    if n < 2:
+def find_largest_meetable_subgroups(db, graph, group):
+    members = sorted(group)
+    if len(members) < 2:
         return []
 
-    # Try the biggest possible group first; if no subset of that size works,
-    # drop down by one and try again.
-    for size in range(n, 1, -1):
-        results = []
-        for combo in combinations(members, size):
-            if not all_pairs_compatible(db, graph, combo):
+    for group_size in range(len(members), 1, -1):
+        options = []
+
+        for people_tuple in combinations(members, group_size):
+            if not all_pairs_compatible(db, graph, people_tuple):
                 continue
-            blocks = common_blocks(db, set(combo))
-            if blocks:
-                results.append((set(combo), blocks))
-        if results:
-            return results
+
+            shared_blocks = find_common_blocks(db, set(people_tuple))
+            if shared_blocks:
+                options.append((set(people_tuple), shared_blocks))
+
+        if options:
+            return options
+
     return []
 
 
-# ---------- output ----------
-
-def format_output(db, graph, groups):
+def print_results(db, graph, groups):
     print("\n========== PROPOSED MEETINGS ==========")
 
     if not groups:
         print("No groups could be formed.")
         return
 
-    any_meeting = False
-    for i, group in enumerate(groups, 1):
-        print(f"\nConnected group {i}: {', '.join(sorted(group))}")
+    found_meeting = False
+
+    for group_number, group in enumerate(groups, 1):
+        print(f"\nConnected group {group_number}: {', '.join(sorted(group))}")
 
         if len(group) < 2:
             print("  (only one person — no meeting possible)")
             continue
 
-        meetable = find_largest_meetable_subgroups(db, graph, group)
-        if not meetable:
+        options = find_largest_meetable_subgroups(db, graph, group)
+        if not options:
             print("  No subset of this group has any common availability.")
             continue
 
-        any_meeting = True
-        size = len(meetable[0][0])
-        print(f"  Largest possible meeting size: {size} people")
-        print(f"  Found {len(meetable)} option(s) of that size:")
-        for j, (people, blocks) in enumerate(meetable, 1):
-            print(f"    Option {j}: {', '.join(sorted(people))}")
-            for day, start, end in merge_blocks_into_ranges(blocks):
-                print(f"      - {day} {minutes_to_time(start)} - {minutes_to_time(end)}")
+        found_meeting = True
+        largest_size = len(options[0][0])
 
-    if not any_meeting:
+        print(f"  Largest possible meeting size: {largest_size} people")
+        print(f"  Found {len(options)} option(s) of that size:")
+
+        for option_number, (people, shared_blocks) in enumerate(options, 1):
+            print(f"    Option {option_number}: {', '.join(sorted(people))}")
+            ranges = merge_blocks_into_ranges(shared_blocks)
+            for day, start_minutes, end_minutes in ranges:
+                start_time = minutes_to_time(start_minutes)
+                end_time = minutes_to_time(end_minutes)
+                print(f"      - {day} {start_time} - {end_time}")
+
+    if not found_meeting:
         print("\nNo meetings could be scheduled with the current users.")
 
-
-# ---------- main ----------
 
 def main():
     db = load_db()
 
-    # "--show" lets you view current proposed meetings without logging in
-    # or changing anything. Handy for inspecting the preloaded sample data.
     if len(sys.argv) > 1 and sys.argv[1] == "--show":
         graph = build_graph(db)
         groups = find_groups(db, graph)
-        format_output(db, graph, groups)
+        print_results(db, graph, groups)
         return
 
-    name = login_or_register(db)
+    username = login_or_register(db)
 
     print("\n----- BLACKLIST -----")
-    ask_blacklist(db, name)
+    ask_blacklist(db, username)
 
     print("\n----- WHO DO YOU WANT TO MEET -----")
-    ask_wants_to_meet(db, name)
+    ask_wants_to_meet(db, username)
 
     print("\n----- YOUR AVAILABILITY -----")
-    ask_availability(db, name)
+    ask_availability(db, username)
 
     print("\n----- OPENNESS -----")
-    ask_open(db, name)
+    ask_open_to_new(db, username)
 
     save_db(db)
 
     graph = build_graph(db)
     groups = find_groups(db, graph)
-    format_output(db, graph, groups)
+    print_results(db, graph, groups)
 
 
 if __name__ == "__main__":
