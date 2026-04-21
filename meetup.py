@@ -1,12 +1,12 @@
 import json                        
 import os                           # lets us check if a file exists on the computer
-import sys                          # lets us read command line arguments like --show
-from collections import deque       # gives us an efficient queue for BFS
+import sys                          
 from itertools import combinations  # lets us generate every possible subset of a group
 
-USERS_DB = "users_db.json"          # the file where all user data is saved
-MIN_SLOT_MINUTES = 30               # minimum length of an availability slot in minutes
-BLOCK_SIZE = 1                      # we track availability minute by minute
+USERS_DB = "users_db.json"         
+MIN_SLOT_MINUTES = 30               
+BLOCK_SIZE = 1                      
+
 
 
 def load_db():
@@ -28,10 +28,10 @@ def ask_nonempty(prompt):
             return value                # if the input is not empty, return it
         print("This can't be blank.")   # otherwise keep asking
 
-
+# for open to meet new prompt later
 def ask_yes_no(prompt):
     while True:
-        value = input(prompt).strip().lower()   # convert to lowercase so Yes and yes both work
+        value = input(prompt).strip().lower()   # convert to lowercase so it isn't case sensitive
         if value == "yes":
             return True
         if value == "no":
@@ -44,7 +44,7 @@ def login_or_register(db):
     username = ask_nonempty("Enter your name: ")
 
     if username in db:                  # check if this user already has an account
-        for _ in range(3):              # give them 3 attempts to enter the correct password
+        for _ in range(3):              # we give them 3 attempts to enter the correct password
             password = ask_nonempty("Enter your password: ")
             if password == db[username]["password"]:
                 print(f"Welcome back, {username}!")
@@ -52,14 +52,14 @@ def login_or_register(db):
             print("Incorrect password.")
 
         print("Too many failed attempts. Exiting.")
-        sys.exit(1)                     # sys.exit stops the whole program immediately
+        sys.exit(1)                     # stops the whole program immediately
 
     print(f"No account found for '{username}'. Creating a new one.")
     password = ask_nonempty("Choose a password: ")
     db[username] = {                    # create a new user entry with all the fields we need
         "password": password,
-        "blacklist": [],                # people this user never wants to meet
-        "wants_to_meet": [],            # people this user wants to meet
+        "blacklist": [],                # people the user never wants to meet
+        "wants_to_meet": [],            # people the user wants to meet
         "open_to_new": False,           # whether they are open to meeting people not on their list
         "availability": [],             # list of time slots when they are free
     }
@@ -78,7 +78,7 @@ def ask_blacklist(db, username):
         "(comma-separated names, or press Enter to keep your current list): "
     ).strip()
 
-    if not response:                    # if the user just pressed Enter, keep the existing blacklist
+    if not response:                    # if the user just pressed enter, keep the existing blacklist
         return
 
     names_to_add = []
@@ -175,26 +175,26 @@ def build_graph(db):
             if wanted_person in db:                 # only add the connection if that person has an account
                 graph[person].add(wanted_person)    # add a directed edge from person to wanted_person
 
-    return graph                        # the graph is a dictionary where each key points to a set of people they want to meet
+    return graph                        # this is a dictionary where each key points to a set of people they want to meet
 
 
 def can_meet(db, graph, person_a, person_b):
     if person_a == person_b:            # a person cannot meet themselves
         return False
 
-    if person_b in db[person_a].get("blacklist", []):   # if person_b is on person_a's blacklist, they cannot meet
+    if person_b in db[person_a].get("blacklist", []):   # if person b is on person a's blacklist, they cannot meet
         return False
-    if person_a in db[person_b].get("blacklist", []):   # if person_a is on person_b's blacklist, they cannot meet
+    if person_a in db[person_b].get("blacklist", []):   # if person a is on person b's blacklist, they cannot meet
         return False
 
-    a_wants_b = person_b in graph[person_a]     # check if person_a listed person_b as someone they want to meet
-    b_wants_a = person_a in graph[person_b]     # check if person_b listed person_a as someone they want to meet
+    a_wants_b = person_b in graph[person_a]     # check if person a listed person b as someone they want to meet
+    b_wants_a = person_a in graph[person_b]     # check if person b listed person a as someone they want to meet
 
-    if a_wants_b and b_wants_a:                 # if both want to meet each other, they are compatible
+    if a_wants_b and b_wants_a:                 # if both want to meet each other, they are compatible!
         return True
-    if a_wants_b and db[person_b].get("open_to_new", False):   # if person_a wants to meet person_b and person_b is open to new people
+    if a_wants_b and db[person_b].get("open_to_new", False):   # if person a wants to meet person b and person b is open to new people
         return True
-    if b_wants_a and db[person_a].get("open_to_new", False):   # if person_b wants to meet person_a and person_a is open to new people
+    if b_wants_a and db[person_a].get("open_to_new", False):   # if person b wants to meet person a and person a is open to new people
         return True
 
     return False                        # in all other cases they cannot meet
@@ -225,7 +225,7 @@ def find_groups(db, graph):
         queue = [start_person]              # start BFS from this person using a regular list as a queue
 
         while queue:
-            person = queue.pop(0)           # take the first person from the front of the queue (BFS behavior)
+            person = queue.pop(0)           # take the first person from the front of the queue FIFO
             if person in visited:
                 continue
 
