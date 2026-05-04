@@ -1,5 +1,5 @@
 import json                        
-import os                           # lets us check if a file exists on the computer
+import os                          
 import sys                          
 from itertools import combinations  # lets us generate every possible subset of a group
 
