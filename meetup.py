@@ -151,15 +151,35 @@ def login_or_register(db):
 
 def ask_blacklist(db, username):
     saved_blacklist = db[username].get("blacklist", [])     # get the existing blacklist, or empty list if none
-    response = input("Blacklist (comma names, Enter keeps current): ").strip()
-    if not response:
+    if saved_blacklist:
+        print(f"Current blacklist: {', '.join(saved_blacklist)}")
+    else:
+        print("Current blacklist: (empty)")
+
+    action = input("Type 'add', 'remove', or Enter to keep current: ").strip().lower()
+    if not action:
         return
 
-    names_to_add = parse_names_csv(response)
+    if action == "add":
+        response = input("Add to blacklist (comma names): ").strip()
+        if not response:
+            return
+        names_to_add = parse_names_csv(response)
+        updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add))
+        updated_blacklist = [name for name in updated_blacklist if name != username]
+        db[username]["blacklist"] = updated_blacklist
+        return
 
-    updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add))
-    updated_blacklist = [name for name in updated_blacklist if name != username]
-    db[username]["blacklist"] = updated_blacklist
+    if action == "remove":
+        response = input("Remove from blacklist (comma names): ").strip()
+        if not response:
+            return
+        names_to_remove = set(parse_names_csv(response))
+        updated_blacklist = [name for name in saved_blacklist if name not in names_to_remove]
+        db[username]["blacklist"] = sorted(updated_blacklist)
+        return
+
+    print("Invalid choice. Keeping current blacklist.")
 
 
 def ask_wants_to_meet(db, username):
@@ -183,7 +203,7 @@ def ask_add_wants_to_meet(db, username):
 
 def ask_returning_user_action():
     print("\nChoose an action:")
-    print("1) Edit blacklist")
+    print("1) Edit blacklist (add/remove)")
     print("2) Add people to want-to-meet list")
     print("3) Change availability")
     print("4) Exit")
