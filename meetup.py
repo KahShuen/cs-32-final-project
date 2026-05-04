@@ -206,13 +206,14 @@ def ask_returning_user_action():
     print("1) Edit blacklist (add/remove)")
     print("2) Add people to want-to-meet list")
     print("3) Change availability")
-    print("4) Exit")
+    print("4) Change openness to meeting new people")
+    print("5) Exit")
 
     while True:
-        choice = input("Enter 1, 2, 3, or 4: ").strip()
-        if choice in ("1", "2", "3", "4"):
+        choice = input("Enter 1, 2, 3, 4, or 5: ").strip()
+        if choice in ("1", "2", "3", "4", "5"):
             return choice
-        print("Invalid choice. Please enter 1, 2, 3, or 4.")
+        print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
 
 
 def time_to_minutes(time_text):
@@ -501,6 +502,8 @@ def main():
                 ask_add_wants_to_meet(db, username)
             elif action == "3":
                 ask_availability(db, username)
+            elif action == "4":
+                ask_open_to_new(db, username)
             else:
                 save_db(db)
                 print("Exited.")
