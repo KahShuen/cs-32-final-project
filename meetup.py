@@ -201,19 +201,37 @@ def ask_add_wants_to_meet(db, username):
     db[username]["wants_to_meet"] = updated_wants
 
 
+def ask_remove_wants_to_meet(db, username):
+    saved_wants = db[username].get("wants_to_meet", [])
+    if saved_wants:
+        print(f"Current want-to-meet list: {', '.join(saved_wants)}")
+    else:
+        print("Current want-to-meet list: (empty)")
+        return
+
+    response = input("Remove people from want-to-meet list (comma names): ").strip()
+    if not response:
+        return
+
+    names_to_remove = set(parse_names_csv(response))
+    updated_wants = [name for name in saved_wants if name not in names_to_remove]
+    db[username]["wants_to_meet"] = sorted(updated_wants)
+
+
 def ask_returning_user_action():
     print("\nChoose an action:")
     print("1) Edit blacklist (add/remove)")
     print("2) Add people to want-to-meet list")
-    print("3) Change availability")
-    print("4) Change openness to meeting new people")
-    print("5) Exit")
+    print("3) Remove people from want-to-meet list")
+    print("4) Change availability")
+    print("5) Change openness to meeting new people")
+    print("6) Exit")
 
     while True:
-        choice = input("Enter 1, 2, 3, 4, or 5: ").strip()
-        if choice in ("1", "2", "3", "4", "5"):
+        choice = input("Enter 1, 2, 3, 4, 5, or 6: ").strip()
+        if choice in ("1", "2", "3", "4", "5", "6"):
             return choice
-        print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
+        print("Invalid choice. Please enter 1, 2, 3, 4, 5, or 6.")
 
 
 def time_to_minutes(time_text):
@@ -501,8 +519,10 @@ def main():
             elif action == "2":
                 ask_add_wants_to_meet(db, username)
             elif action == "3":
-                ask_availability(db, username)
+                ask_remove_wants_to_meet(db, username)
             elif action == "4":
+                ask_availability(db, username)
+            elif action == "5":
                 ask_open_to_new(db, username)
             else:
                 save_db(db)
