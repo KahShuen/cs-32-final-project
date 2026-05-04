@@ -483,7 +483,7 @@ def main():
                 ask_availability(db, username)
             else:
                 save_db(db)
-                print("Goodbye.")
+                print("Exited.")
                 return
 
             save_db(db)
