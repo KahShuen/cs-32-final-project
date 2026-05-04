@@ -31,6 +31,8 @@ def parse_time_to_minutes(time_text):
         raise ValueError("Time must use HH:MM.")
 
     hours_text, minutes_text = parts
+    if len(hours_text) != 2 or len(minutes_text) != 2:
+        raise ValueError("Time must use two-digit HH:MM.")
     if (not hours_text.isdigit()) or (not minutes_text.isdigit()):
         raise ValueError("Time must contain only numbers.")
 
@@ -44,8 +46,13 @@ def parse_time_to_minutes(time_text):
 
 def normalize_db(db):
     normalized = {}
+    if not isinstance(db, dict):
+        return normalized
 
     for raw_username, raw_data in db.items():
+        if not isinstance(raw_data, dict):
+            continue
+
         username = normalize_name(raw_username)
         if not username:
             continue
@@ -63,12 +70,20 @@ def normalize_db(db):
         blacklist = raw_data.get("blacklist", [])
         wants_to_meet = raw_data.get("wants_to_meet", [])
         availability = raw_data.get("availability", [])
+        if not isinstance(blacklist, list):
+            blacklist = []
+        if not isinstance(wants_to_meet, list):
+            wants_to_meet = []
+        if not isinstance(availability, list):
+            availability = []
 
         user["blacklist"].extend([normalize_name(name) for name in blacklist if normalize_name(name)])
         user["wants_to_meet"].extend([normalize_name(name) for name in wants_to_meet if normalize_name(name)])
         user["open_to_new"] = user["open_to_new"] or bool(raw_data.get("open_to_new", False))
 
         for slot in availability:
+            if not isinstance(slot, dict):
+                continue
             day = normalize_name(slot.get("day", ""))
             start = str(slot.get("start", "")).strip()
             end = str(slot.get("end", "")).strip()
@@ -92,9 +107,12 @@ def normalize_db(db):
 
 def load_db():
     if os.path.exists(USERS_DB):    # os.path.exists checks if the file already exists on disk
-        with open(USERS_DB, "r") as file:
-            raw_db = json.load(file)  # read the JSON file and convert it into a python dictionary
-            return normalize_db(raw_db)
+        try:
+            with open(USERS_DB, "r") as file:
+                raw_db = json.load(file)  # read the JSON file and convert it into a python dictionary
+                return normalize_db(raw_db)
+        except (json.JSONDecodeError, OSError):
+            return {}
     return {}                         # if the file doesn't exist yet, start with an empty dictionary
 
 
