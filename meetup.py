@@ -129,7 +129,7 @@ def login_or_register(db):
             password = ask_nonempty("Password: ")
             if password == db[username]["password"]:
                 print(f"Welcome back, {username}.")
-                return username
+                return username, True
             print("Incorrect password.")
 
         print("Too many failed attempts.")
@@ -146,7 +146,7 @@ def login_or_register(db):
     }
     save_db(db)
     print("Account created.")
-    return username
+    return username, False
 
 
 def ask_blacklist(db, username):
@@ -167,6 +167,32 @@ def ask_wants_to_meet(db, username):
     names = parse_names_csv(response) if response else []
     names = [name for name in names if name != username]
     db[username]["wants_to_meet"] = names
+
+
+def ask_add_wants_to_meet(db, username):
+    saved_wants = db[username].get("wants_to_meet", [])
+    response = input("Add people you want to meet (comma names): ").strip()
+    if not response:
+        return
+
+    names_to_add = parse_names_csv(response)
+    updated_wants = sorted(set(saved_wants) | set(names_to_add))
+    updated_wants = [name for name in updated_wants if name != username]
+    db[username]["wants_to_meet"] = updated_wants
+
+
+def ask_returning_user_action():
+    print("\nChoose an action:")
+    print("1) Edit blacklist")
+    print("2) Add people to want-to-meet list")
+    print("3) Change availability")
+    print("4) Exit")
+
+    while True:
+        choice = input("Enter 1, 2, 3, or 4: ").strip()
+        if choice in ("1", "2", "3", "4"):
+            return choice
+        print("Invalid choice. Please enter 1, 2, 3, or 4.")
 
 
 def time_to_minutes(time_text):
@@ -440,7 +466,30 @@ def main():
         print_results(db, graph, groups)
         return                              # stop here without running the interactive prompts
 
-    username = login_or_register(db)        # log in or create a new account
+    username, is_returning_user = login_or_register(db)        # log in or create a new account
+
+    if is_returning_user and db[username].get("availability"):
+        graph, reverse_graph = build_graph(db)
+        groups = find_groups(db, graph, reverse_graph)
+        print_results(db, graph, groups)
+
+        while True:
+            action = ask_returning_user_action()
+            if action == "1":
+                ask_blacklist(db, username)
+            elif action == "2":
+                ask_add_wants_to_meet(db, username)
+            elif action == "3":
+                ask_availability(db, username)
+            else:
+                save_db(db)
+                print("Goodbye.")
+                return
+
+            save_db(db)
+            graph, reverse_graph = build_graph(db)
+            groups = find_groups(db, graph, reverse_graph)
+            print_results(db, graph, groups)
 
     ask_blacklist(db, username)
 
