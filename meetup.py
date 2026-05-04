@@ -6,14 +6,94 @@ from itertools import combinations  # lets us generate every possible subset of 
 USERS_DB = "users_db.json"         
 MIN_SLOT_MINUTES = 30               
 BLOCK_SIZE = 1                      
+DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+VALID_DAYS = set(DAY_ORDER)
+
+
+def normalize_name(name_text):
+    return name_text.strip().lower()
+
+
+def parse_names_csv(text):
+    names = []
+    for raw_name in text.split(","):
+        clean_name = normalize_name(raw_name)
+        if clean_name:
+            names.append(clean_name)
+    return names
+
+
+def parse_time_to_minutes(time_text):
+    parts = time_text.split(":")
+    if len(parts) != 2:
+        raise ValueError("Time must use HH:MM.")
+
+    hours_text, minutes_text = parts
+    if (not hours_text.isdigit()) or (not minutes_text.isdigit()):
+        raise ValueError("Time must contain only numbers.")
+
+    hours = int(hours_text)
+    minutes = int(minutes_text)
+    if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
+        raise ValueError("Time is out of range.")
+
+    return hours * 60 + minutes
+
+
+def normalize_db(db):
+    normalized = {}
+
+    for raw_username, raw_data in db.items():
+        username = normalize_name(raw_username)
+        if not username:
+            continue
+
+        if username not in normalized:
+            normalized[username] = {
+                "password": str(raw_data.get("password", "")),
+                "blacklist": [],
+                "wants_to_meet": [],
+                "open_to_new": bool(raw_data.get("open_to_new", False)),
+                "availability": [],
+            }
+
+        user = normalized[username]
+        blacklist = raw_data.get("blacklist", [])
+        wants_to_meet = raw_data.get("wants_to_meet", [])
+        availability = raw_data.get("availability", [])
+
+        user["blacklist"].extend([normalize_name(name) for name in blacklist if normalize_name(name)])
+        user["wants_to_meet"].extend([normalize_name(name) for name in wants_to_meet if normalize_name(name)])
+        user["open_to_new"] = user["open_to_new"] or bool(raw_data.get("open_to_new", False))
+
+        for slot in availability:
+            day = normalize_name(slot.get("day", ""))
+            start = str(slot.get("start", "")).strip()
+            end = str(slot.get("end", "")).strip()
+            if day not in VALID_DAYS:
+                continue
+            try:
+                start_minutes = parse_time_to_minutes(start)
+                end_minutes = parse_time_to_minutes(end)
+            except ValueError:
+                continue
+            if end_minutes - start_minutes < MIN_SLOT_MINUTES:
+                continue
+            user["availability"].append({"day": day, "start": start, "end": end})
+
+        user["blacklist"] = sorted(set([name for name in user["blacklist"] if name != username]))
+        user["wants_to_meet"] = sorted(set([name for name in user["wants_to_meet"] if name != username]))
+
+    return normalized
 
 
 
 def load_db():
     if os.path.exists(USERS_DB):    # os.path.exists checks if the file already exists on disk
         with open(USERS_DB, "r") as file:
-            return json.load(file)  # read the JSON file and convert it into a python dictionary
-    return {}                       # if the file doesn't exist yet, start with an empty dictionary
+            raw_db = json.load(file)  # read the JSON file and convert it into a python dictionary
+            return normalize_db(raw_db)
+    return {}                         # if the file doesn't exist yet, start with an empty dictionary
 
 
 def save_db(db):
@@ -32,30 +112,29 @@ def ask_nonempty(prompt):
 def ask_yes_no(prompt):
     while True:
         value = input(prompt).strip().lower()   # convert to lowercase so it isn't case sensitive
-        if value == "yes":
+        if value in ("yes", "y"):
             return True
-        if value == "no":
+        if value in ("no", "n"):
             return False
-        print('Please answer "Yes" or "No".')
+        print('Please answer "yes" or "no".')
 
 
 def login_or_register(db):
-    print("===== MEETUP LOGIN =====")
-    username = ask_nonempty("Enter your name: ")
+    username = normalize_name(ask_nonempty("Name: "))
 
     if username in db:                  # check if this user already has an account
         for _ in range(3):              # we give them 3 attempts to enter the correct password
-            password = ask_nonempty("Enter your password: ")
+            password = ask_nonempty("Password: ")
             if password == db[username]["password"]:
-                print(f"Welcome back, {username}!")
+                print(f"Welcome back, {username}.")
                 return username
             print("Incorrect password.")
 
-        print("Too many failed attempts. Exiting.")
+        print("Too many failed attempts.")
         sys.exit(1)                     # stops the whole program immediately
 
-    print(f"No account found for '{username}'. Creating a new one.")
-    password = ask_nonempty("Choose a password: ")
+    print(f"Creating account for {username}.")
+    password = ask_nonempty("Choose password: ")
     db[username] = {                    # create a new user entry with all the fields we need
         "password": password,
         "blacklist": [],                # people the user never wants to meet
@@ -64,50 +143,32 @@ def login_or_register(db):
         "availability": [],             # list of time slots when they are free
     }
     save_db(db)
-    print(f"Account created for {username}.")
+    print("Account created.")
     return username
 
 
 def ask_blacklist(db, username):
     saved_blacklist = db[username].get("blacklist", [])     # get the existing blacklist, or empty list if none
-    if saved_blacklist:
-        print(f"Your saved blacklist: {', '.join(saved_blacklist)}")
-
-    response = input(
-        "Is there anyone you want to blacklist? "
-        "(comma-separated names, or press Enter to keep your current list): "
-    ).strip()
-
-    if not response:                    # if the user just pressed enter, keep the existing blacklist
+    response = input("Blacklist (comma names, Enter keeps current): ").strip()
+    if not response:
         return
 
-    names_to_add = []
-    for raw_name in response.split(","):        # split the input by commas to get individual names
-        clean_name = raw_name.strip()           # remove spaces around each name
-        if clean_name:
-            names_to_add.append(clean_name)
+    names_to_add = parse_names_csv(response)
 
-    updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add))    # combine old and new names, remove duplicates using a set, then sort alphabetically
+    updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add))
+    updated_blacklist = [name for name in updated_blacklist if name != username]
     db[username]["blacklist"] = updated_blacklist
-    print(f"Updated blacklist: {', '.join(updated_blacklist)}")
 
 
 def ask_wants_to_meet(db, username):
-    response = input("Who do you want to meet? (comma-separated names): ").strip()
-    names = []
-
-    if response:
-        for raw_name in response.split(","):    # split by commas to get individual names
-            clean_name = raw_name.strip()       # remove spaces around each name
-            if clean_name:
-                names.append(clean_name)
-
+    response = input("People you want to meet (comma names): ").strip()
+    names = parse_names_csv(response) if response else []
+    names = [name for name in names if name != username]
     db[username]["wants_to_meet"] = names
 
 
 def time_to_minutes(time_text):
-    hours, minutes = time_text.split(":")      # split "10:30" into "10" and "30"
-    return int(hours) * 60 + int(minutes)      # convert to total minutes, e.g. 10:30 becomes 630
+    return parse_time_to_minutes(time_text)
 
 
 def minutes_to_time(total_minutes):
@@ -115,10 +176,7 @@ def minutes_to_time(total_minutes):
 
 
 def ask_availability(db, username):
-    print("\nEnter your availability, one slot per line.")
-    print("Format: Day HH:MM HH:MM   (e.g. 'Monday 10:00 12:00')")
-    print("Each time slot should be at least 30 minutes long.")
-    print("Type 'done' when finished.")
+    print("\nAvailability format: Day HH:MM HH:MM (type 'done' to finish)")
 
     availability = []
 
@@ -134,11 +192,16 @@ def ask_availability(db, username):
 
         day, start_text, end_text = parts       # unpack the three parts into separate variables
 
+        day = normalize_name(day)
+        if day not in VALID_DAYS:
+            print("Invalid day. Use Monday-Sunday.")
+            continue
+
         try:
-            start_minutes = time_to_minutes(start_text)     # convert start time to minutes
-            end_minutes = time_to_minutes(end_text)         # convert end time to minutes
+            start_minutes = parse_time_to_minutes(start_text)
+            end_minutes = parse_time_to_minutes(end_text)
         except ValueError:
-            print("Invalid time. Use HH:MM (24-hour).")
+            print("Invalid time. Use HH:MM in 24-hour format.")
             continue
 
         if start_minutes >= end_minutes:
@@ -151,8 +214,8 @@ def ask_availability(db, username):
 
         availability.append({
             "day": day,
-            "start": start_text,
-            "end": end_text,
+            "start": minutes_to_time(start_minutes),
+            "end": minutes_to_time(end_minutes),
         })
 
     db[username]["availability"] = availability
@@ -160,7 +223,7 @@ def ask_availability(db, username):
 
 def ask_open_to_new(db, username):
     db[username]["open_to_new"] = ask_yes_no(
-        "Are you open to meeting people not on your list (Yes/No)? "
+        "Open to meeting people not on your list? (yes/no): "
     )
 
 
@@ -281,7 +344,9 @@ def merge_blocks_into_ranges(blocks):
 
     time_ranges = []
 
-    for day, minutes in blocks_by_day.items():
+    sorted_days = sorted(blocks_by_day.keys(), key=lambda day_name: DAY_ORDER.index(day_name))
+    for day in sorted_days:
+        minutes = blocks_by_day[day]
         minutes.sort()                      # sort the minutes so we can find consecutive ones
         range_start = minutes[0]            # the start of the current time range
         previous_minute = minutes[0]
@@ -330,42 +395,30 @@ def find_largest_meetable_subgroups(db, graph, group):
 
 
 def print_results(db, graph, groups):
-    print("\n========== PROPOSED MEETINGS ==========")
-
-    if not groups:
-        print("No groups could be formed.")
-        return
-
+    print("\nMeeting options:")
     found_meeting = False
+    option_number = 1
 
-    for group_number, group in enumerate(groups, 1):    # enumerate gives us a counter starting from 1
-        print(f"\nConnected group {group_number}: {', '.join(sorted(group))}")
-
+    for group in groups:
         if len(group) < 2:
-            print("  (only one person — no meeting possible)")
             continue
 
         options = find_largest_meetable_subgroups(db, graph, group)
         if not options:
-            print("  No subset of this group has any common availability.")
             continue
 
         found_meeting = True
-        largest_size = len(options[0][0])               # all options have the same size since we return at the largest valid size
-
-        print(f"  Largest possible meeting size: {largest_size} people")
-        print(f"  Found {len(options)} option(s) of that size:")
-
-        for option_number, (people, shared_blocks) in enumerate(options, 1):
-            print(f"    Option {option_number}: {', '.join(sorted(people))}")
+        for people, shared_blocks in options:
+            print(f"\nOption {option_number}: {', '.join(sorted(people))}")
             ranges = merge_blocks_into_ranges(shared_blocks)
             for day, start_minutes, end_minutes in ranges:
                 start_time = minutes_to_time(start_minutes)
                 end_time = minutes_to_time(end_minutes)
-                print(f"      - {day} {start_time} - {end_time}")
+                print(f"- {day.capitalize()} {start_time} - {end_time}")
+            option_number += 1
 
     if not found_meeting:
-        print("\nNo meetings could be scheduled with the current users.")
+        print("No meetings can be scheduled with current data.")
 
 
 def main():
@@ -379,16 +432,12 @@ def main():
 
     username = login_or_register(db)        # log in or create a new account
 
-    print("\n----- BLACKLIST -----")
     ask_blacklist(db, username)
 
-    print("\n----- WHO DO YOU WANT TO MEET -----")
     ask_wants_to_meet(db, username)
 
-    print("\n----- YOUR AVAILABILITY -----")
     ask_availability(db, username)
 
-    print("\n----- OPENNESS -----")
     ask_open_to_new(db, username)
 
     save_db(db)                             # save all updated user data back to the JSON file
