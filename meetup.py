@@ -8,8 +8,10 @@ MIN_SLOT_MINUTES = 30
 BLOCK_SIZE = 1                      
 DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 VALID_DAYS = set(DAY_ORDER)
-FULL_SEARCH_GROUP_LIMIT = 14
-CAPPED_SEARCH_MAX_SIZE = 5
+# Human-facing heuristic:
+# For larger connected groups, we cap search at a practical meetup size.
+# Bigger groups are costly to compute and are also hard to schedule in real life.
+MAX_REASONABLE_MEETING_SIZE = 8
 
 
 def normalize_name(name_text):
@@ -460,11 +462,8 @@ def find_largest_meetable_subgroups(db, graph, group):
     if len(members) < 2:
         return [], False
 
-    search_max_size = len(members)
-    was_capped = False
-    if len(members) > FULL_SEARCH_GROUP_LIMIT:
-        search_max_size = min(search_max_size, CAPPED_SEARCH_MAX_SIZE)
-        was_capped = True
+    search_max_size = min(len(members), MAX_REASONABLE_MEETING_SIZE)
+    was_capped = len(members) > MAX_REASONABLE_MEETING_SIZE
 
     for group_size in range(search_max_size, 1, -1):      # try from the largest possible group size down to 2
         options = []
@@ -499,7 +498,7 @@ def print_results(db, graph, groups):
         found_meeting = True
         if was_capped:
             print(
-                f"\nNote: group has {len(group)} people; search was capped at size {CAPPED_SEARCH_MAX_SIZE} for speed."
+                f"\nNote: group has {len(group)} people; search was capped at size {MAX_REASONABLE_MEETING_SIZE}."
             )
         for people, shared_blocks in options:
             print(f"\nOption {option_number}: {', '.join(sorted(people))}")
