@@ -8,6 +8,8 @@ MIN_SLOT_MINUTES = 30
 BLOCK_SIZE = 1                      
 DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 VALID_DAYS = set(DAY_ORDER)
+FULL_SEARCH_GROUP_LIMIT = 14
+CAPPED_SEARCH_MAX_SIZE = 5
 
 
 def normalize_name(name_text):
@@ -229,16 +231,19 @@ def ask_open_to_new(db, username):
 
 def build_graph(db):
     graph = {}
+    reverse_graph = {}
     for person in db:
         graph[person] = set()           # every person starts with an empty set of connections
+        reverse_graph[person] = set()   # keep incoming edges so BFS neighbor lookup is fast
 
     for person in db:
         wanted_people = db[person].get("wants_to_meet", [])
         for wanted_person in wanted_people:
             if wanted_person in db:                 # only add the connection if that person has an account
                 graph[person].add(wanted_person)    # add a directed edge from person to wanted_person
+                reverse_graph[wanted_person].add(person)
 
-    return graph                        # this is a dictionary where each key points to a set of people they want to meet
+    return graph, reverse_graph
 
 
 def can_meet(db, graph, person_a, person_b):
@@ -263,20 +268,13 @@ def can_meet(db, graph, person_a, person_b):
     return False                        # in all other cases they cannot meet
 
 
-def get_friends_for_bfs(graph, person):
-    friends = set()
-
-    for wanted_person in graph[person]:     # add everyone this person wants to meet
-        friends.add(wanted_person)
-
-    for other_person in graph:
-        if person in graph[other_person]:   # also add everyone who wants to meet this person
-            friends.add(other_person)
-
+def get_friends_for_bfs(graph, reverse_graph, person):
+    friends = set(graph[person])
+    friends |= reverse_graph[person]
     return friends                          # returns everyone connected to this person in either direction
 
 
-def find_groups(db, graph):
+def find_groups(db, graph, reverse_graph):
     visited = set()                         # keeps track of people we have already placed into a group
     groups = []
 
@@ -286,16 +284,18 @@ def find_groups(db, graph):
 
         group = set()
         queue = [start_person]              # start BFS from this person using a regular list as a queue
+        queue_index = 0
 
-        while queue:
-            person = queue.pop(0)           # take the first person from the front of the queue FIFO
+        while queue_index < len(queue):
+            person = queue[queue_index]
+            queue_index += 1
             if person in visited:
                 continue
 
             visited.add(person)             # mark this person as visited
             group.add(person)               # add them to the current group
 
-            friends = get_friends_for_bfs(graph, person)
+            friends = get_friends_for_bfs(graph, reverse_graph, person)
             for friend in friends:
                 if friend in visited:
                     continue
@@ -373,11 +373,17 @@ def all_pairs_compatible(db, graph, people):
 
 
 def find_largest_meetable_subgroups(db, graph, group):
-    members = sorted(group)
+    members = [person for person in sorted(group) if db[person].get("availability")]
     if len(members) < 2:
-        return []
+        return [], False
 
-    for group_size in range(len(members), 1, -1):      # try from the largest possible group size down to 2
+    search_max_size = len(members)
+    was_capped = False
+    if len(members) > FULL_SEARCH_GROUP_LIMIT:
+        search_max_size = min(search_max_size, CAPPED_SEARCH_MAX_SIZE)
+        was_capped = True
+
+    for group_size in range(search_max_size, 1, -1):      # try from the largest possible group size down to 2
         options = []
 
         for people_tuple in combinations(members, group_size):  # combinations generates every possible subset of this size
@@ -389,9 +395,9 @@ def find_largest_meetable_subgroups(db, graph, group):
                 options.append((set(people_tuple), shared_blocks))      # if both checks pass, this is a valid meeting option
 
         if options:
-            return options              # return as soon as we find the largest valid group size
+            return options, was_capped              # return as soon as we find the largest valid group size
 
-    return []
+    return [], was_capped
 
 
 def print_results(db, graph, groups):
@@ -403,11 +409,15 @@ def print_results(db, graph, groups):
         if len(group) < 2:
             continue
 
-        options = find_largest_meetable_subgroups(db, graph, group)
+        options, was_capped = find_largest_meetable_subgroups(db, graph, group)
         if not options:
             continue
 
         found_meeting = True
+        if was_capped:
+            print(
+                f"\nNote: group has {len(group)} people; search was capped at size {CAPPED_SEARCH_MAX_SIZE} for speed."
+            )
         for people, shared_blocks in options:
             print(f"\nOption {option_number}: {', '.join(sorted(people))}")
             ranges = merge_blocks_into_ranges(shared_blocks)
@@ -425,8 +435,8 @@ def main():
     db = load_db()                          # load all saved user data from the JSON file
 
     if len(sys.argv) > 1 and sys.argv[1] == "--show":  # sys.argv is the list of command line arguments, sys.argv[1] is the first argument after the filename
-        graph = build_graph(db)
-        groups = find_groups(db, graph)
+        graph, reverse_graph = build_graph(db)
+        groups = find_groups(db, graph, reverse_graph)
         print_results(db, graph, groups)
         return                              # stop here without running the interactive prompts
 
@@ -442,8 +452,8 @@ def main():
 
     save_db(db)                             # save all updated user data back to the JSON file
 
-    graph = build_graph(db)                 # build the social graph from all saved user data
-    groups = find_groups(db, graph)         # find connected groups of compatible people
+    graph, reverse_graph = build_graph(db)  # build the social graph from all saved user data
+    groups = find_groups(db, graph, reverse_graph)         # find connected groups of compatible people
     print_results(db, graph, groups)        # print the final meeting suggestions
 
 
