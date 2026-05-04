@@ -4,30 +4,27 @@ import sys
 from itertools import combinations  # lets us generate every possible subset of a group
 
 USERS_DB = "users_db.json"         
-MIN_SLOT_MINUTES = 30               
+MIN_SLOT_MINUTES = 30               # minimum time slots for meeting must be 30mins
 BLOCK_SIZE = 1                      
 DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 VALID_DAYS = set(DAY_ORDER)
-# Human-facing heuristic:
-# For larger connected groups, we cap search at a practical meetup size.
-# Bigger groups are costly to compute and are also hard to schedule in real life.
-MAX_REASONABLE_MEETING_SIZE = 8
+MAX_REASONABLE_MEETING_SIZE = 8     # cap the search to meetup size of 8 (because people usually want to meet in a max size of 8)
 
 
 def normalize_name(name_text):
-    return name_text.strip().lower()
+    return name_text.strip().lower()  # make it case insensitive, and remove the extra spaces
 
 
-def parse_names_csv(text):
+def parse_names_csv(text): # turn comma-seperated inputs into a list
     names = []
     for raw_name in text.split(","):
-        clean_name = normalize_name(raw_name)
+        clean_name = normalize_name(raw_name) 
         if clean_name:
-            names.append(clean_name)
-    return names
+            names.append(clean_name) # only include non-empty names
+    return names 
 
 
-def parse_time_to_minutes(time_text):
+def parse_time_to_minutes(time_text): # check the input for availabilities 
     parts = time_text.split(":")
     if len(parts) != 2:
         raise ValueError("Time must use HH:MM.")
@@ -43,15 +40,15 @@ def parse_time_to_minutes(time_text):
     if hours < 0 or hours > 23 or minutes < 0 or minutes > 59:
         raise ValueError("Time is out of range.")
 
-    return hours * 60 + minutes
+    return hours * 60 + minutes # return the time using number of minutes from midnight
 
 
-def normalize_db(db):
-    normalized = {}
-    if not isinstance(db, dict):
+def normalize_db(db): # fix anything that is invalid/inconsistent in the database and return a clean version
+    normalized = {} # create a new database
+    if not isinstance(db, dict): # if the current database is corrupted/not a dictionary then return empty
         return normalized
 
-    for raw_username, raw_data in db.items():
+    for raw_username, raw_data in db.items(): # loop through every user
         if not isinstance(raw_data, dict):
             continue
 
@@ -59,7 +56,7 @@ def normalize_db(db):
         if not username:
             continue
 
-        if username not in normalized:
+        if username not in normalized: # make sure all the input are saved with the same format
             normalized[username] = {
                 "password": str(raw_data.get("password", "")),
                 "blacklist": [],
@@ -69,21 +66,21 @@ def normalize_db(db):
             }
 
         user = normalized[username]
-        blacklist = raw_data.get("blacklist", [])
+        blacklist = raw_data.get("blacklist", []) 
         wants_to_meet = raw_data.get("wants_to_meet", [])
         availability = raw_data.get("availability", [])
-        if not isinstance(blacklist, list):
+        if not isinstance(blacklist, list): # if list is correupted, reset it to empty list 
             blacklist = []
         if not isinstance(wants_to_meet, list):
             wants_to_meet = []
         if not isinstance(availability, list):
             availability = []
 
-        user["blacklist"].extend([normalize_name(name) for name in blacklist if normalize_name(name)])
+        user["blacklist"].extend([normalize_name(name) for name in blacklist if normalize_name(name)])  # normalize and remove empty values
         user["wants_to_meet"].extend([normalize_name(name) for name in wants_to_meet if normalize_name(name)])
         user["open_to_new"] = user["open_to_new"] or bool(raw_data.get("open_to_new", False))
 
-        for slot in availability:
+        for slot in availability: # check if input is valid
             if not isinstance(slot, dict):
                 continue
             day = normalize_name(slot.get("day", ""))
@@ -96,7 +93,7 @@ def normalize_db(db):
                 end_minutes = parse_time_to_minutes(end)
             except ValueError:
                 continue
-            if end_minutes - start_minutes < MIN_SLOT_MINUTES:
+            if end_minutes - start_minutes < MIN_SLOT_MINUTES: # make sure the person is available for at least 30 minutes slots 
                 continue
             user["availability"].append({"day": day, "start": start, "end": end})
 
@@ -171,12 +168,12 @@ def login_or_register(db):
 
 def ask_blacklist(db, username):
     saved_blacklist = db[username].get("blacklist", [])     # get the existing blacklist, or empty list if none
-    if saved_blacklist:
+    if saved_blacklist:  # show the user the blacklist
         print(f"Current blacklist: {', '.join(saved_blacklist)}")
     else:
         print("Current blacklist: (empty)")
 
-    action = input("Type 'add', 'remove', or Enter to keep current: ").strip().lower()
+    action = input("Type 'add', 'remove', or Enter to keep current: ").strip().lower()  # allow user to change their blacklist
     if not action:
         return
 
@@ -185,8 +182,8 @@ def ask_blacklist(db, username):
         if not response:
             return
         names_to_add = parse_names_csv(response)
-        updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add))
-        updated_blacklist = [name for name in updated_blacklist if name != username]
+        updated_blacklist = sorted(set(saved_blacklist) | set(names_to_add)) # merge with existing list 
+        updated_blacklist = [name for name in updated_blacklist if name != username] # prevent the user from accidentally blacklisting themselves
         db[username]["blacklist"] = updated_blacklist
         return
 
@@ -195,7 +192,7 @@ def ask_blacklist(db, username):
         if not response:
             return
         names_to_remove = set(parse_names_csv(response))
-        updated_blacklist = [name for name in saved_blacklist if name not in names_to_remove]
+        updated_blacklist = [name for name in saved_blacklist if name not in names_to_remove] 
         db[username]["blacklist"] = sorted(updated_blacklist)
         return
 
@@ -355,7 +352,7 @@ def can_meet(db, graph, person_a, person_b):
 
 def get_friends_for_bfs(graph, reverse_graph, person):
     friends = set(graph[person])
-    friends |= reverse_graph[person]
+    friends |= reverse_graph[person]        # mergers reverse_graph[person] into friends
     return friends                          # returns everyone connected to this person in either direction
 
 
@@ -369,11 +366,11 @@ def find_groups(db, graph, reverse_graph):
 
         group = set()
         queue = [start_person]              # start BFS from this person using a regular list as a queue
-        queue_index = 0
+        
 
-        while queue_index < len(queue):
-            person = queue[queue_index]
-            queue_index += 1
+        while len(queue) > 0:
+            person = queue[0]               # take first person from the front of the queue
+            queue = queue[1:]               # remove them from the queue as they are already being processed
             if person in visited:
                 continue
 
@@ -420,6 +417,10 @@ def find_common_blocks(db, group):
     return shared_blocks                    # returns only the minutes when everyone in the group is free
 
 
+def get_day_position(day_name):
+    return DAY_ORDER.index(day_name)  # returns 0 for monday, 1 for tuesday, etc.
+
+
 def merge_blocks_into_ranges(blocks):
     blocks_by_day = {}
     for day, minute in blocks:
@@ -429,7 +430,7 @@ def merge_blocks_into_ranges(blocks):
 
     time_ranges = []
 
-    sorted_days = sorted(blocks_by_day.keys(), key=lambda day_name: DAY_ORDER.index(day_name))
+    sorted_days = sorted(blocks_by_day.keys(), key=get_day_position)  # sorts days in calendar order instead of alphabetically
     for day in sorted_days:
         minutes = blocks_by_day[day]
         minutes.sort()                      # sort the minutes so we can find consecutive ones
@@ -458,7 +459,7 @@ def all_pairs_compatible(db, graph, people):
 
 
 def find_largest_meetable_subgroups(db, graph, group):
-    members = [person for person in sorted(group) if db[person].get("availability")]
+    members = [person for person in sorted(group) if db[person].get("availability")]        # loops through sorted group and only keeps people who have entered their availability
     if len(members) < 2:
         return [], False
 
